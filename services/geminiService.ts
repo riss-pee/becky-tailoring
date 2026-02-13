@@ -1,21 +1,24 @@
-
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { Measurements } from "../types";
 
-// Helper to safely initialize the AI client
+// The AI client is initialized lazily to ensure process.env is available after shimming.
 const getAIClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.warn("Gemini API Key is missing. Style advice features will be disabled.");
+  try {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      console.warn("Gemini API Key is missing. AI features will use fallback messages.");
+      return null;
+    }
+    return new GoogleGenAI({ apiKey });
+  } catch (e) {
+    console.error("Failed to initialize Gemini AI:", e);
     return null;
   }
-  return new GoogleGenAI({ apiKey });
 };
 
-const ai = getAIClient();
-
 export const generateStyleAdvice = async (measurements: Measurements, stylePreference: string) => {
-  if (!ai) return "Our style consultant is currently offline. Please configure the API key.";
+  const ai = getAIClient();
+  if (!ai) return "Our style consultant suggests focusing on structured silhouettes that complement your natural proportions. Consider A-line cuts or tailored blazers for a timeless, elegant look.";
   
   try {
     const prompt = `Based on these measurements (in cm): Bust: ${measurements.bust}, Waist: ${measurements.waist}, Hips: ${measurements.hips}, Shoulder: ${measurements.shoulder}. 
@@ -26,15 +29,16 @@ export const generateStyleAdvice = async (measurements: Measurements, stylePrefe
       contents: prompt,
     });
 
-    return response.text || "Unable to generate advice at this time.";
+    return response.text || "Focus on silhouettes that highlight your natural waistline and offer a balanced proportion.";
   } catch (error) {
     console.error("Gemini Error:", error);
-    return "Our style consultant is busy right now. Please try again later.";
+    return "Our style consultant is currently unavailable. We recommend focusing on classic, well-fitted pieces.";
   }
 };
 
 export const generateProductDescription = async (productName: string) => {
-  if (!ai) return "Exquisite craftsmanship meet timeless design.";
+  const ai = getAIClient();
+  if (!ai) return "A masterpiece of bespoke tailoring, combining traditional techniques with contemporary elegance. Hand-finished for the perfect fit.";
 
   try {
     const prompt = `Write a luxurious, short marketing description (2 sentences) for a handcrafted clothing item named "${productName}". Mention the quality of stitching and premium materials.`;
@@ -44,15 +48,16 @@ export const generateProductDescription = async (productName: string) => {
       contents: prompt,
     });
     
-    return response.text || "Exquisite craftsmanship meet timeless design.";
+    return response.text || "Exquisite craftsmanship meets timeless design in this bespoke creation.";
   } catch (error) {
     console.error("Gemini Error:", error);
-    return "Handcrafted with passion and precision.";
+    return "Handcrafted with passion and precision using the finest materials.";
   }
 };
 
 export const generateEmailDraft = async (clientName: string, orderDetails: string, tailorName: string, tailorPhone: string) => {
-  if (!ai) return `Dear ${clientName}, Your order (${orderDetails}) is ready for pickup. Please contact ${tailorName} at ${tailorPhone}.`;
+  const ai = getAIClient();
+  if (!ai) return `Dear ${clientName}, Your bespoke order for ${orderDetails} is now ready at our atelier. Please contact ${tailorName} at ${tailorPhone} to arrange your final fitting or collection.`;
 
   try {
     const prompt = `Draft a high-end, professional, and warm email to a client named ${clientName}. 
@@ -65,7 +70,7 @@ export const generateEmailDraft = async (clientName: string, orderDetails: strin
       contents: prompt,
     });
     
-    return response.text || "Your order is ready for pickup.";
+    return response.text || `Your bespoke order for ${orderDetails} is ready for collection.`;
   } catch (error) {
     console.error("Gemini Error:", error);
     return `Dear ${clientName}, Your order (${orderDetails}) is ready for pickup. Please contact ${tailorName} at ${tailorPhone}.`;
