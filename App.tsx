@@ -24,30 +24,41 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const initApp = async () => {
-      setLoading(true);
-      await fetchProducts();
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        await fetchUserProfile(session.user.id, false); 
+      try {
+        setLoading(true);
+        await fetchProducts();
+        
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+
+        if (session?.user) {
+          await fetchUserProfile(session.user.id, false); 
+        }
+      } catch (err) {
+        console.error("Initialization error:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     initApp();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          await fetchUserProfile(session.user.id, true);
+      try {
+        if (session?.user) {
+          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+            await fetchUserProfile(session.user.id, true);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          setAuth({ user: null, isAuthenticated: false });
+          setOrders([]);
+          setAppointments([]);
+          setUsers([]);
+          setNotifications([]);
+          setCurrentPage('home');
         }
-      } else if (event === 'SIGNED_OUT') {
-        setAuth({ user: null, isAuthenticated: false });
-        setOrders([]);
-        setAppointments([]);
-        setUsers([]);
-        setNotifications([]);
-        setCurrentPage('home');
+      } catch (err) {
+        console.error("Auth change error:", err);
       }
     });
 
@@ -55,46 +66,64 @@ const App: React.FC = () => {
   }, []);
 
   const fetchProducts = async () => {
-    const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
-    if (!error && data) setProducts(data);
+    try {
+      const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      if (data) setProducts(data);
+    } catch (err) {
+      console.error("Fetch products error:", err);
+    }
   };
 
   const fetchUserProfile = async (userId: string, shouldRedirect: boolean) => {
-    const { data: profile, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (!error && profile) {
-      setAuth({ user: profile, isAuthenticated: true });
-      if (profile.role === 'admin') {
-        await fetchAllAdminData();
-        if (shouldRedirect) setCurrentPage('admin-dashboard');
-      } else {
-        await fetchUserData(profile.id);
-        if (shouldRedirect) setCurrentPage('home');
+    try {
+      const { data: profile, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      if (error) throw error;
+      if (profile) {
+        setAuth({ user: profile, isAuthenticated: true });
+        if (profile.role === 'admin') {
+          await fetchAllAdminData();
+          if (shouldRedirect) setCurrentPage('admin-dashboard');
+        } else {
+          await fetchUserData(profile.id);
+          if (shouldRedirect) setCurrentPage('home');
+        }
+        return profile;
       }
-      return profile;
+    } catch (err) {
+      console.error("Fetch profile error:", err);
     }
     return null;
   };
 
   const fetchUserData = async (userId: string) => {
-    const [{ data: userOrders }, { data: userAppts }] = await Promise.all([
-      supabase.from('orders').select('*').eq('user_id', userId).order('date', { ascending: false }),
-      supabase.from('appointments').select('*').eq('user_id', userId).order('date', { ascending: false })
-    ]);
-    if (userOrders) setOrders(userOrders.map(o => ({ ...o, userId: o.user_id, userName: o.user_name, productId: o.product_id, productName: o.product_name })) || []);
-    if (userAppts) setAppointments(userAppts.map(a => ({ ...a, userId: a.user_id, userName: a.user_name })) || []);
+    try {
+      const [{ data: userOrders }, { data: userAppts }] = await Promise.all([
+        supabase.from('orders').select('*').eq('user_id', userId).order('date', { ascending: false }),
+        supabase.from('appointments').select('*').eq('user_id', userId).order('date', { ascending: false })
+      ]);
+      if (userOrders) setOrders(userOrders.map(o => ({ ...o, userId: o.user_id, userName: o.user_name, productId: o.product_id, productName: o.product_name })) || []);
+      if (userAppts) setAppointments(userAppts.map(a => ({ ...a, userId: a.user_id, userName: a.user_name })) || []);
+    } catch (err) {
+      console.error("Fetch user data error:", err);
+    }
   };
 
   const fetchAllAdminData = async () => {
-    const [ordersRes, apptsRes, usersRes, notifsRes] = await Promise.all([
-      supabase.from('orders').select('*').order('date', { ascending: false }),
-      supabase.from('appointments').select('*').order('date', { ascending: false }),
-      supabase.from('profiles').select('*').eq('role', 'user'),
-      supabase.from('notifications').select('*').order('date', { ascending: false })
-    ]);
-    if (ordersRes.data) setOrders(ordersRes.data.map(o => ({ ...o, userId: o.user_id, userName: o.user_name, productId: o.product_id, productName: o.product_name })));
-    if (apptsRes.data) setAppointments(apptsRes.data.map(a => ({ ...a, userId: a.user_id, userName: a.user_name })));
-    if (usersRes.data) setUsers(usersRes.data);
-    if (notifsRes.data) setNotifications(notifsRes.data);
+    try {
+      const [ordersRes, apptsRes, usersRes, notifsRes] = await Promise.all([
+        supabase.from('orders').select('*').order('date', { ascending: false }),
+        supabase.from('appointments').select('*').order('date', { ascending: false }),
+        supabase.from('profiles').select('*').eq('role', 'user'),
+        supabase.from('notifications').select('*').order('date', { ascending: false })
+      ]);
+      if (ordersRes.data) setOrders(ordersRes.data.map(o => ({ ...o, userId: o.user_id, userName: o.user_name, productId: o.product_id, productName: o.product_name })));
+      if (apptsRes.data) setAppointments(apptsRes.data.map(a => ({ ...a, userId: a.user_id, userName: a.user_name })));
+      if (usersRes.data) setUsers(usersRes.data);
+      if (notifsRes.data) setNotifications(notifsRes.data);
+    } catch (err) {
+      console.error("Fetch admin data error:", err);
+    }
   };
 
   const showSuccess = (title: string, msg: string) => {
